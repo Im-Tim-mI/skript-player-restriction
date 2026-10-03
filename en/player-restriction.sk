@@ -1,0 +1,532 @@
+# ------------------------------------------------------------
+#  skript-player-restriction (English edition)
+#  https://github.com/Im-Tim-mI/skript-player-restriction
+#  Copyright (c) 2026 廷廷小教室、廷廷的家（Tim945）
+#  License: MIT + Commons Clause (see LICENSE)
+# ------------------------------------------------------------
+
+# ============================================
+# Player Restriction System v9 - full edition
+# Supports Bedrock players (names starting with .)
+# Blocks all interactions
+# ============================================
+
+options:
+    prefix: &c[Restrict]
+
+import:
+    org.bukkit.event.player.PlayerInteractEvent
+    org.bukkit.event.block.Action
+    org.bukkit.Material
+
+# ============================================
+# Function: find a player by name
+# ============================================
+function findPlayer(name: text) :: offlineplayer:
+    loop all offline players:
+        if name of loop-value is {_name}:
+            return loop-value
+    loop all players:
+        if name of loop-value is {_name}:
+            return loop-value
+    return {_null}
+
+# ============================================
+# Restrict a player
+# ============================================
+command /restrict <text> <text>:
+    permission: op
+    permission message: &cYou don't have permission to use this command!
+    usage: &cUsage: /restrict <player name> <reason>
+    trigger:
+        set {_name} to arg-1
+        set {_reason} to arg-2
+        set {_executor} to "%player%"
+
+        set {_player} to findPlayer({_name})
+
+        if {_player} is not set:
+            send "{@prefix} &cPlayer %{_name}% not found!"
+            send "{@prefix} &eTip: you can use the UUID directly"
+            send "{@prefix} &eUse /seen %{_name}% to look up the UUID"
+            stop
+
+        set {_uuid} to uuid of {_player}
+
+        if {_uuid} is not set:
+            send "{@prefix} &cCouldn't get the player's UUID!"
+            stop
+
+        # Already restricted?
+        if {freeze.reason.%{_uuid}%} is set:
+            send "{@prefix} &c&l⚠ Warning: this player is already restricted in the database!"
+            send "{@prefix} &ePlayer: &f%{_name}%"
+            send "{@prefix} &eReason: &f%{freeze.reason.%{_uuid}%}%"
+            send "{@prefix} &eBy: &f%{freeze.by.%{_uuid}%}%"
+            send "{@prefix} &eTime: &f%{freeze.time.%{_uuid}%}%"
+            send "{@prefix} &7To change the reason, use /unrestrict first and then restrict again"
+            stop
+
+        set {freeze.reason.%{_uuid}%} to {_reason}
+        set {freeze.by.%{_uuid}%} to {_executor}
+        set {freeze.time.%{_uuid}%} to now
+        set {freeze.name.%{_uuid}%} to {_name}
+
+        add "%{_uuid}%" to {freeze.list::*}
+
+        execute console command "lp user %{_uuid}% parent add frozen"
+
+        # Server-wide broadcast
+        broadcast ""
+        broadcast "&c&l⚠ Player Restricted ⚠"
+        broadcast "&cPlayer: &e&l%{_name}%"
+        broadcast "&cBy: &f%{_executor}%"
+        broadcast "&cReason: &f%{_reason}%"
+        broadcast ""
+
+        send "{@prefix} &aRestricted player &e%{_name}%"
+        send "{@prefix} &aUUID: &f%{_uuid}%"
+        send "{@prefix} &aReason: &f%{_reason}%"
+
+        if {_player} is online:
+            send "{@prefix} &c&lYou have been restricted!" to {_player}
+            send "{@prefix} &cReason: &f%{_reason}%" to {_player}
+            send "{@prefix} &cYou can no longer interact with anything!" to {_player}
+
+# ============================================
+# Restrict a player by UUID
+# ============================================
+command /restrictuuid <text> <text>:
+    permission: op
+    permission message: &cYou don't have permission to use this command!
+    usage: &cUsage: /restrictuuid <UUID> <reason>
+    trigger:
+        set {_uuid} to arg-1
+        set {_reason} to arg-2
+        set {_executor} to "%player%"
+
+        # Already restricted?
+        if {freeze.reason.%{_uuid}%} is set:
+            send "{@prefix} &c&l⚠ Warning: this UUID is already restricted in the database!"
+            send "{@prefix} &ePlayer: &f%{freeze.name.%{_uuid}%}%"
+            send "{@prefix} &eReason: &f%{freeze.reason.%{_uuid}%}%"
+            send "{@prefix} &eBy: &f%{freeze.by.%{_uuid}%}%"
+            send "{@prefix} &eTime: &f%{freeze.time.%{_uuid}%}%"
+            send "{@prefix} &7To change the reason, use /unrestrictuuid first and then restrict again"
+            stop
+
+        set {freeze.reason.%{_uuid}%} to {_reason}
+        set {freeze.by.%{_uuid}%} to {_executor}
+        set {freeze.time.%{_uuid}%} to now
+        set {freeze.name.%{_uuid}%} to {_uuid}
+
+        add "%{_uuid}%" to {freeze.list::*}
+
+        execute console command "lp user %{_uuid}% parent add frozen"
+
+        # Server-wide broadcast
+        broadcast ""
+        broadcast "&c&l⚠ Player Restricted ⚠"
+        broadcast "&cPlayer UUID: &e&l%{_uuid}%"
+        broadcast "&cBy: &f%{_executor}%"
+        broadcast "&cReason: &f%{_reason}%"
+        broadcast ""
+
+        send "{@prefix} &aRestricted UUID: &e%{_uuid}%"
+        send "{@prefix} &aReason: &f%{_reason}%"
+
+# ============================================
+# Lift a restriction
+# ============================================
+command /unrestrict <text>:
+    permission: op
+    permission message: &cYou don't have permission to use this command!
+    usage: &cUsage: /unrestrict <player name>
+    trigger:
+        set {_name} to arg-1
+        set {_executor} to "%player%"
+
+        set {_player} to findPlayer({_name})
+
+        if {_player} is not set:
+            send "{@prefix} &cPlayer %{_name}% not found!"
+            send "{@prefix} &eTip: you can use /unrestrictuuid <UUID>"
+            stop
+
+        set {_uuid} to uuid of {_player}
+
+        if {_uuid} is not set:
+            send "{@prefix} &cCouldn't get the player's UUID!"
+            stop
+
+        if {freeze.reason.%{_uuid}%} is not set:
+            send "{@prefix} &cThat player is not restricted!"
+            stop
+
+        # Broadcast first, then delete
+        broadcast ""
+        broadcast "&a&l⚠ Player Unrestricted ⚠"
+        broadcast "&aPlayer: &e&l%{_name}%"
+        broadcast "&aBy: &f%{_executor}%"
+        broadcast ""
+
+        delete {freeze.reason.%{_uuid}%}
+        delete {freeze.by.%{_uuid}%}
+        delete {freeze.time.%{_uuid}%}
+        delete {freeze.name.%{_uuid}%}
+
+        remove "%{_uuid}%" from {freeze.list::*}
+
+        execute console command "lp user %{_uuid}% parent remove frozen"
+
+        send "{@prefix} &aLifted the restriction on &e%{_name}%"
+
+        if {_player} is online:
+            send "{@prefix} &a&lYour restriction has been lifted!" to {_player}
+            send "{@prefix} &aYou can play normally again." to {_player}
+
+# ============================================
+# Lift a restriction by UUID
+# ============================================
+command /unrestrictuuid <text>:
+    permission: op
+    permission message: &cYou don't have permission to use this command!
+    usage: &cUsage: /unrestrictuuid <UUID>
+    trigger:
+        set {_uuid} to arg-1
+        set {_executor} to "%player%"
+
+        if {freeze.reason.%{_uuid}%} is not set:
+            send "{@prefix} &cThat UUID is not restricted!"
+            stop
+
+        # Keep the player name first
+        set {_savedname} to {freeze.name.%{_uuid}%}
+
+        # Broadcast first, then delete
+        broadcast ""
+        broadcast "&a&l⚠ Player Unrestricted ⚠"
+        broadcast "&aPlayer: &e&l%{_savedname}%"
+        broadcast "&aBy: &f%{_executor}%"
+        broadcast ""
+
+        delete {freeze.reason.%{_uuid}%}
+        delete {freeze.by.%{_uuid}%}
+        delete {freeze.time.%{_uuid}%}
+        delete {freeze.name.%{_uuid}%}
+
+        remove "%{_uuid}%" from {freeze.list::*}
+
+        execute console command "lp user %{_uuid}% parent remove frozen"
+
+        send "{@prefix} &aLifted the restriction on UUID &e%{_uuid}%"
+
+# ============================================
+# Show restriction status
+# ============================================
+command /restrictstatus <text>:
+    permission: op
+    permission message: &cYou don't have permission to use this command!
+    usage: &cUsage: /restrictstatus <player name or UUID>
+    trigger:
+        set {_input} to arg-1
+
+        set {_player} to findPlayer({_input})
+
+        if {_player} is set:
+            set {_uuid} to uuid of {_player}
+        else:
+            set {_uuid} to {_input}
+
+        if {freeze.reason.%{_uuid}%} is not set:
+            send "{@prefix} &aThat player is not restricted."
+            stop
+
+        send "{@prefix} &e===== Restriction Info ====="
+        send "{@prefix} &ePlayer: &f%{freeze.name.%{_uuid}%}%"
+        send "{@prefix} &eUUID: &f%{_uuid}%"
+        send "{@prefix} &eReason: &f%{freeze.reason.%{_uuid}%}%"
+        send "{@prefix} &eBy: &f%{freeze.by.%{_uuid}%}%"
+        send "{@prefix} &eTime: &f%{freeze.time.%{_uuid}%}%"
+
+# ============================================
+# List every restricted player
+# ============================================
+command /restrictlist:
+    permission: op
+    permission message: &cYou don't have permission to use this command!
+    trigger:
+        send "{@prefix} &e===== Restricted Players ====="
+
+        if size of {freeze.list::*} = 0:
+            send "{@prefix} &aNo players are restricted right now."
+            stop
+
+        set {_count} to 0
+        loop {freeze.list::*}:
+            set {_uuid} to loop-value
+            add 1 to {_count}
+            set {_displayname} to {freeze.name.%{_uuid}%}
+            if {_displayname} is not set:
+                set {_displayname} to {_uuid}
+            send "&e%{_count}%. &f%{_displayname}%"
+            send "   &7UUID: %{_uuid}%"
+            send "   &7Reason: %{freeze.reason.%{_uuid}%}%"
+
+        send "{@prefix} &e&f%{_count}% &eplayer(s) restricted in total."
+
+# ============================================
+# Clean up invalid data
+# ============================================
+command /restrictcleanup:
+    permission: op
+    permission message: &cYou don't have permission to use this command!
+    trigger:
+        send "{@prefix} &eCleaning up invalid data..."
+
+        set {_removed} to 0
+        set {_cleaned} to 0
+
+        # Build a new, clean list
+        set {_newlist::*} to ""
+        delete {_newlist::*}
+
+        loop {freeze.list::*}:
+            set {_uuid} to loop-value
+
+            # Is it valid (does it have a reason)?
+            if {freeze.reason.%{_uuid}%} is set:
+                # Already in the new list? (deduplicate)
+                if {_newlist::*} does not contain "%{_uuid}%":
+                    add "%{_uuid}%" to {_newlist::*}
+                else:
+                    add 1 to {_removed}
+                    send "{@prefix} &7Removed duplicate: %{freeze.name.%{_uuid}%}%"
+            else:
+                add 1 to {_cleaned}
+                send "{@prefix} &7Removed invalid entry: %{_uuid}%"
+                # Clean up leftover variables
+                delete {freeze.reason.%{_uuid}%}
+                delete {freeze.by.%{_uuid}%}
+                delete {freeze.time.%{_uuid}%}
+                delete {freeze.name.%{_uuid}%}
+                # Remove from LuckPerms
+                execute console command "lp user %{_uuid}% parent remove frozen"
+
+        # Replace with the new list
+        delete {freeze.list::*}
+        loop {_newlist::*}:
+            add "%loop-value%" to {freeze.list::*}
+
+        send "{@prefix} &aCleanup complete!"
+        send "{@prefix} &aDuplicates removed: &f%{_removed}%"
+        send "{@prefix} &aInvalid entries removed: &f%{_cleaned}%"
+        send "{@prefix} &aValid entries now: &f%size of {freeze.list::*}%"
+
+# ============================================
+# Force-remove a UUID
+# ============================================
+command /restrictforceremove <text>:
+    permission: op
+    permission message: &cYou don't have permission to use this command!
+    usage: &cUsage: /restrictforceremove <UUID>
+    trigger:
+        set {_uuid} to arg-1
+
+        # Remove every matching entry from the list
+        loop {freeze.list::*}:
+            if loop-value is {_uuid}:
+                remove loop-value from {freeze.list::*}
+
+        # Clean up all related variables
+        delete {freeze.reason.%{_uuid}%}
+        delete {freeze.by.%{_uuid}%}
+        delete {freeze.time.%{_uuid}%}
+        delete {freeze.name.%{_uuid}%}
+
+        # Remove from LuckPerms
+        execute console command "lp user %{_uuid}% parent remove frozen"
+
+        send "{@prefix} &aForce-removed UUID: &e%{_uuid}%"
+
+# ============================================
+# Check for a restriction when a player joins
+# ============================================
+on join:
+    set {_uuid} to uuid of player
+
+    if {freeze.reason.%{_uuid}%} is set:
+        # Server-wide broadcast
+        wait 5 ticks
+        broadcast ""
+        broadcast "&c&l⚠ Warning ⚠"
+        broadcast "&cRestricted player &e&l%player% &chas joined the server"
+        broadcast "&cReason: &f%{freeze.reason.%{_uuid}%}%"
+        broadcast ""
+
+        # Private message to that player
+        wait 1 second
+        send "" to player
+        send "&c&l========================================" to player
+        send "&c&l      ⚠ Your account is restricted ⚠" to player
+        send "&c&l========================================" to player
+        send "" to player
+        send "&cReason: &f%{freeze.reason.%{_uuid}%}%" to player
+        send "" to player
+        send "&cRestricted by: &f%{freeze.by.%{_uuid}%}%" to player
+        send "&cRestricted at: &f%{freeze.time.%{_uuid}%}%" to player
+        send "" to player
+        send "&eYou currently can't:" to player
+        send "&7- place or break blocks" to player
+        send "&7- open chests" to player
+        send "&7- interact with items" to player
+        send "&7- use teleport commands" to player
+        send "" to player
+        send "&eIf you have any questions, please contact an admin." to player
+        send "&eTo be unrestricted, apologize and win forgiveness through a community vote!!" to player
+        send "&c&l========================================" to player
+        send "" to player
+
+# ============================================
+# Block every interaction of restricted players
+# ============================================
+
+# Block trampling farmland (protects wheat and other crops) ※ needs the skript-reflect plugin
+on PlayerInteractEvent:
+    event.getAction() is Action.PHYSICAL
+    event.getClickedBlock() is set
+    event.getClickedBlock().getType() is Material.FARMLAND
+    set {_uuid} to uuid of event.getPlayer()
+    if {freeze.reason.%{_uuid}%} is set:
+        event.setCancelled(true)
+        send action bar "&c&l⚠ You are restricted and can't trample crops" to event.getPlayer()
+
+# Block placing blocks
+on block place:
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send action bar "&c&l⚠ You are restricted and can't place blocks" to player
+
+# Block breaking blocks
+on block break:
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send action bar "&c&l⚠ You are restricted and can't break blocks" to player
+
+# Block clicking (left and right click)
+on click:
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send action bar "&c&l⚠ You are restricted and can't interact" to player
+
+# Block attacking entities
+on damage:
+    attacker is a player
+    set {_uuid} to uuid of attacker
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send action bar "&c&l⚠ You are restricted and can't attack" to attacker
+
+# Block dropping items
+on drop:
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send action bar "&c&l⚠ You are restricted and can't drop items" to player
+
+# Block picking up items
+on pickup:
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+
+# Block opening containers (chests, barrels, shulker boxes, ...)
+on inventory open:
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        if event-inventory is not player's inventory:
+            cancel event
+            send action bar "&c&l⚠ You are restricted and can't open containers" to player
+
+# Block shooting
+on shoot:
+    shooter is a player
+    set {_uuid} to uuid of shooter
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send action bar "&c&l⚠ You are restricted and can't shoot" to shooter
+
+# Block riding
+on vehicle enter:
+    player is event-entity
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send action bar "&c&l⚠ You are restricted and can't ride anything" to player
+
+# Block using beds
+on bed enter:
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send action bar "&c&l⚠ You are restricted and can't use beds" to player
+
+# Block every command for restricted players
+on command:
+    player is set
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use any commands!" to player
+
+# Block specific commands
+on command "tp":
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use this command!" to player
+
+on command "tpa":
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use this command!" to player
+
+on command "tpaccept":
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use this command!" to player
+
+on command "home":
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use this command!" to player
+
+on command "sethome":
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use this command!" to player
+
+on command "spawn":
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use this command!" to player
+
+on command "warp":
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use this command!" to player
+
+on command "back":
+    set {_uuid} to uuid of player
+    if {freeze.reason.%{_uuid}%} is set:
+        cancel event
+        send "{@prefix} &cYou are restricted and can't use this command!" to player
